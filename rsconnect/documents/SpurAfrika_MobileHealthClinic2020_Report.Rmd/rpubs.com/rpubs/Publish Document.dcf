@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/646300/2ba8b9311fc343ee8fc133bf70ffd6a7
+bundleId: https://api.rpubs.com/api/v1/document/646300/2ba8b9311fc343ee8fc133bf70ffd6a7
+url: http://rpubs.com/DavidFong/646300
+when: 1608013964.96845

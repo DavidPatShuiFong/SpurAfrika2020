@@ -1,0 +1,1010 @@
+---
+title: "Spur Afrika Mobile Health Clinic 2020 Report"
+author: "David Fong"
+date: "15th December 2020"
+output:
+  rmdformats::readthedown:
+    toc_depth: 4
+    code_folding: hide
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    latex_engine: xelatex
+    toc: yes
+  word_document:
+    toc: yes
+    toc_depth: '3'
+bibliography: "./references.bib"
+csl: "./apa.csl"
+---
+
+## Abstract
+
+  >Spur Afrika mobile clinics were held in January 2020, seeing children
+  from several schools in Kibera, Kenya, and children sponsored by the Spur Afrika
+  Elimsha program. Health activities included medical and dental checks, dental
+  hygiene education and medication education. 938 children were seen, ranging in
+  ages from seven to eighteen years, but mostly in the ten to fourteen year age
+  group.
+  >
+  >Respiratory, eye, dental and gastrointestinal conditions were the most common
+  conditions seen.
+  >
+  >Children sponsored by Spur Afrika were more likely to report that they had
+  no outstanding medical complaints, reported brushing their teeth more often
+  and were less likely to report respiratory
+  complaints or complaints potentially attributable to air pollution, compared
+  to children seen who were not supported by the Spur Afrika program.
+  >
+  >This may be the outcome of better access to healthcare throughout the year
+  e.g. due to arrangements with local medical staff - Dr. Simiyu and programs to
+  encourage National Health Insurance (NHIF) uptake. The benefits of dental
+  education, improved general education and financial support might also be
+  responsible for improve health outcomes. 
+  >
+  >Children sponsored by Spur Afrika reported brushing their teeth more
+  frequently than children not sponsored by the Spur Afrika program.
+
+## Introduction
+
+Spur Afrika mobile medical clinics were conducted in January 2020, reaching out to 
+children in Spur Afrika Elimisha sponsorship program during a camp retreat and to
+entire classes of children in Kibera during clinics at Kibera schools.
+
+The goals of the clinics include identification children who require treatment for medical
+illness, improve health education and literacy among schoolchildren, improve oral
+hygiene and reduce the impact of poor health on education and life opportunities.
+
+In addition, identification of prevalent health conditions will be used to
+identify health needs of the student population, with a view to informing
+future clinics.
+
+## Activities
+
+Health clinics conducted by dental and medical staff, together with local Spur
+Afrika staff, volunteers and assistants.
+
+Mobile health clinics located at Kibera schools were conducted daily from 6th January
+2020 to 10th January 2020. A health clinic conducted for children sponsored by Spur Afrika
+during a retreat on 3rd January 2020.
+
+Children attending the clinics were offered, and usually administered, de-worming.
+
+Group dental hygiene sessions were conducted at Kibera schools and the sponsored children
+retreat.
+
+According to the direction of medical staff, medication was dispensed to children.
+For those children requiring asthma medication, a 'spacer' to improve medication
+delivery and effectiveness was provided, and instruction provided on use.
+
+## Outputs
+
+Total people seen in clinics by doctors : 983
+
+Estimated total people seen aged 18 years or less : 938
+
+Group dental hygiene sessions were conducted five times. Four times during the
+mobile clinics located at schools, and once during the sponsored children retreat.
+Hundreds of children were reached.
+
+All twenty (20) available spacers for asthma medication were distributed,
+and education provided on use.
+
+### Summary data for children aged up to eighteen years inclusive
+
+```{r setup, include=FALSE}
+base_key <- list(
+  twenty = "appvbtyuUpEZpgX5s",
+  eighteen = "app1e650orwV0LbRR"
+)
+```
+
+```{r message=FALSE, warning=FALSE}
+# required libraries
+
+library(airtabler) # database access
+library(dplyr)     # data manipulation
+library(tidyr)     # 'tidy' data
+library(magrittr)  # piping
+library(lubridate) # time functions
+library(finalfit)  # summary tables
+library(lme4)      # regressions
+library(jtools)    # pretty regression tables
+library(summarytools)# pretty regression tables
+library(kableExtra)  # pretty tables
+library(highcharter) # charts
+library(viridisLite) # colour palettes
+library(sjPlot)      # regression table display, requires recent version
+```
+
+```{r}
+# read database
+
+airtable_tables <- list(
+  twenty = c("Children"),
+  eighteen = c("Children", "Schools", "FindingCodes")
+)
+
+airtable <- mapply(function(x, y) airtabler::airtable(x, y), base_key, airtable_tables)
+rawdata <- lapply(airtable, function(x) x$Children$select_all())
+```
+
+```{r}
+schools_2018 <- airtable[[2]]$Schools$select_all() %>% select("id", "SchoolName")
+findingcodes_2018 <- airtable[[2]]$FindingCodes$select_all() %>% select("id", "Description")
+
+rawdata$eighteen$School <- lapply(
+  rawdata[["eighteen"]]$School,
+  function(x) {
+    unlist(lapply(
+      x, function(x) schools_2018[schools_2018$id == x, "SchoolName"]),
+      use.names = FALSE)
+  }
+)
+rawdata$eighteen$School[sapply(rawdata$eighteen$School, is.null)] <- NA
+rawdata$eighteen$School <- unlist(rawdata$eighteen$School)
+rawdata$eighteen$Diagnosis <- lapply(
+  rawdata[["eighteen"]]$Diagnosis,
+  function(x) {
+    unlist(
+      lapply(
+        x,
+        function(x) findingcodes_2018[findingcodes_2018$id == x, "Description"]
+      ), use.names = FALSE
+    )
+  }
+)
+rawdata$eighteen$Diagnosis[sapply(rawdata$eighteen$Diagnosis, is.null)] <- NA
+
+```
+
+```{r warning = FALSE}
+# choose the required data
+
+# some columns not present in 2018 data
+addcols <- function(data, cname) {
+  add <-cname[!cname %in% names(data)]
+  
+  if (length(add) != 0) data[add] <- as.character(NA)
+  data
+}
+
+data <- lapply(rawdata, function(x) 
+  x %>%
+    addcols(c("Clinician", "Oral hygiene (daily)")) %>%
+    select(
+      c("id", "Gender", "Date of birth", "Date seen",
+        "School", "Diagnosis", "Clinician", "Sponsored",
+        "Oral hygiene (daily)")
+    ) %>%
+    replace_na(list(Clinician = "Other")) %>%
+    mutate(
+      Gender = factor(Gender, c("Male", "Female")),
+      School = as.factor(School),
+      Clinician = as.factor(Clinician),
+      Sponsored = replace_na(Sponsored, FALSE),
+      OralHygiene = as.numeric(`Oral hygiene (daily)`)
+    )
+)
+
+# * **Gender** Male, Female and NA. 'NA' is 'not available'
+# * **School** School attended (if recorded)
+# * **Clinician** The clinician/'surveyor' who saw the child. 
+# * **Sponsored** children are supported by the Spur Afrika child development program.
+
+# Some data is 'Factorized' : **Gender**, **School**, **Sponsored** and **Clinician**
+```
+
+
+```{r}
+# calculate ages
+data <- lapply(data, function(x)
+  x %>%
+    mutate(
+      `Date seen` = as.Date(`Date seen`),
+      `Date of birth` = as.Date(`Date of birth`)
+    ) %>%
+    mutate(AgeDays = `Date seen` - `Date of birth`) %>%
+    mutate(AgeYears = floor(time_length(AgeDays, "years"))) %>%
+    mutate(AgeGroup = as.factor(
+      paste0(
+        as.character(floor((AgeYears+1)/2)*2-1),
+        "-",
+        as.character(floor((AgeYears+1)/2)*2)
+      ) # two year age groups
+    ))
+)
+# * **AgeDays** Age in days
+# * **AgeYears** Age in years
+# * **AgeGroup** Grouped into 'two years' groups
+```
+
+
+
+```{r}
+# add categories to data
+
+find_string <- function(x, y) {
+  # find y string in x. returns vector of TRUE/FALSE
+  unlist(
+    lapply(
+      x,
+      function(z) any(toupper(y) %in% toupper(z))
+    )
+  )
+}
+
+data <- lapply(data, function(x)
+  x %>%
+    mutate(
+      PollutionDiagnosis = find_string(
+        x$Diagnosis,
+        c("Adenitis",
+          "Asthma", "Bronchiectasis", "Bronchitis",
+          "Lower respiratory tract infection", "Respiratory tract infection",
+          "Otitis media", "Otitis media - acute", "Siusitis",
+          "Tonsilitis", "Allergic Bronchitis", "Allergic rhinitis",
+          "Upper respiratory tract infection", "Viral illness",
+          "Viral pharyngitis", "Viral upper respiratory tract infection")
+      ),
+      PollutionFinding = find_string(
+        x$Diagnosis, c("Conjunctivitis - allergic", "Allergic conjunctivitis",
+                       "Cough", "Cough - cold weather",
+                       "Cough - exertional",
+                       "Cough - nocturnal", "Dry eyes", "Dyspnoea", "Dyspnoea - exercise",
+                       "Environmental irritant", "Eye inflammation", "Eye irritation", "Photophobia",
+                       "Eye pain", "Eyes dry", "Itchy eyes", "Lacrimation",
+                       "rhonchi", "runny nose", "Short of breath",  "Smoke irritation", "Sore throat",
+                       "Viral pharyngitis",
+                       "Watery eyes", "Wheezing", "Rhinorrhoea")
+      ),
+      PollutionDiagnosisOrFinding = PollutionDiagnosis | PollutionFinding,
+      Respiratory = find_string(
+        x$Diagnosis, c("Viral upper respiratory tract infection", "Wheezing", "rhonchi", "Viral pharyngitis",
+          "Tracheomalacia", "Tonsilitis", "Sore throat", "Rhinorrhoea", "Respiratory tract infection",
+          "Nasal congestion", "Dyspnoea", "Dyspnoea - exercise", "Dyspnoea - nocturnal",
+          "Cough - nocturnal", "Cough - exertional", "Cough - cold weather", "Cough", "Bronchitis",
+          "Asthma", "Allergic rhinitis", "Allergic Bronchitis", "Bronchiectasis", "Short of breath",
+          "Tuberculosis", "Upper respiratory tract infection")
+      ),
+      EarsNose = find_string(
+        x$Diagnosis, c("difficulty hearing", "Dry nasal mucosa", "Ear pain", "Ear wax",
+                       "Epistaxis", "Foreign body in ear", "Hearing loss", "Hunger pains",
+                       "Impacted earwax",
+                       "Jaw and temporomandibular joint pain", "Jaw pain",
+                       "Lymphadenopathy - cervical", "Nose bridge pain",
+                       "Otitis media", "Otitis media - acute", "Otitis externa",
+                       "Rhinitis", "runny nose", "Sinusitis", "Viral pharyngitis",
+                       "Tonsilitis"
+                      )
+      ),
+      Gastrointestinal = find_string(
+        x$Diagnosis, c("Abdominal pain", "Constipation", "Diarrhoea", "Dysphagia", "Dyspepsia",
+                       "Epigastric pain", "FODMAP intolerance",
+                       "Food intolerance", "Gastro-oesophageal reflux", "Gastro-oesophageal reflux disease (GORD)",
+                       "Gastroenteritis", "Gastrointestinal infection", "Glossitis", "Indigestion", "Iron deficiency",
+                       "Irritable bowel syndrome", "nausea", "Umbilical hernia")
+      ),
+      Dermatological = find_string(
+        x$Diagnosis, c("Acne", "Atopic Urticaria", "Burns", "Cellulitis", "Dermatitis", "dry eyelid",
+          "Eczema", "facial blemish", "Infected wound", "Ingrown toenail",
+          "Molluscum contagiosum", "Psoriasis", "rash", "Rashes",
+          "Scabies", "Scar", "Skin laceration", "Skin lesion", "Sebaceous cyst", "Tinea", "Tinea capitis")
+      ),
+      Psychological = find_string(x$Diagnosis, c("Anxiety")),
+      Opthalmological = find_string(
+        x$Diagnosis, c("Astigmatism", "Blindness","Allergic conjunctivitis", "Conjunctivitis - allergic",
+                       "Dry eyes", "Episcleritis", "Eye inflammation",
+                       "Eye irritation", "Eye lesion", "Eye pain", "Eyesight poor", "Eyes dry",
+                       "Hyperopia", "Iritis",
+                       "Itchy eyes", "Lacrimation", "Myopia", "Orbital cellulitis",
+                       "Photophobia", "Poor vision",
+                       "Pterygium", "Refractive error", "Strabismus",
+                       "Watery eyes")
+      ),
+      Musculoskeletal = find_string(
+        x$Diagnosis, c("Arm pain", "Back pain", "Cervicogenic headache", "Hand pain",
+          "Joint pain", "Knee pain", "Leg pain", "Lumbago", "Muscle spasm", 
+          "Musculoskeletal injury",
+          "Musculoskeletal pain", "Neck pain", "Prosthetic limb", "Wrist pain")
+      ),
+      Dental = find_string(
+        x$Diagnosis, c("Caries", "Dental calculus", "Dental carie", "Dental Cavity",
+                       "Dental decay", "Dental fracture", "Dental overcrowding",
+          "Dental pain", "Dental plaque", "Gingivitis", "Gum disease", "Halitosis",
+          "Pericoronitis", "Toothache", "Toothache - cold drink or food",
+          "Tooth Hypomineralization", "Tooth loose")
+      ),
+      Gynaecological = find_string(
+        x$Diagnosis, c("Dysmenorrhoea", "Menorrhagia",
+                       "Mittleschmerz pain", "Pelvic inflammatory disease",
+                       "pre-menstrual pain", "Vaginal infection")
+      ),
+      Urological = find_string(
+        x$Diagnosis, c("Dysuria", "Haematuria", "Nephritis",
+                       "Non specific urethritis", "Pyelonephritis",
+                       "Urinary tract infection")
+      ),
+      Neurological  = find_string(
+        x$Diagnosis, c("Headache", "Migraine", "Seizures", "Tension headache")
+      )
+    )
+)
+```
+
+```{r}
+# make the data wide
+wide_data <- lapply(data, function(x)
+  x %>%
+    unnest(Diagnosis) %>% # each finding/condition/diagnosis has its own row
+    mutate(yesno = TRUE) %>% # 'dummy' column
+    distinct() %>%           # get rid of duplicates (there shouldn't be any)
+    spread(Diagnosis, yesno, fill = FALSE) # go 'wide'
+  # each finding/diagnosis will now have its own column
+  # if the patient had the 'Diagnosis' in their list, then 
+  #  the column entry will have 'yesno' = TRUE
+  #  otherwise will equal the 'fill' = FALSE
+)
+
+# Diagnoses/conditions e.g. asthma, bronchitis.
+# 
+# Findings e.g. cough, itchy eyes.
+# 
+# In the database, both diagnoses and findings information are found in the **Diagnosis** column.
+# 
+# Created summary columns are **PollutionDiagnosis**, **PollutionFinding** and **PollutionDiagnosisOrFinding**. These variables are set to TRUE if the child has a condition or finding which could be aggravated or caused by air pollution.
+
+```
+
+
+```{r}
+# filter by age and clinician
+
+filtered_wide_data <- lapply(wide_data, function(x)
+  x %>%
+    filter(AgeYears <= 18) # children only
+)
+# there are some respondents who are in university etc. and 20+ years old
+
+### Data filtering
+
+# *Only* children up to the age of 16 years is included in the analysis.
+
+```
+
+#### Summary statistics 
+
+##### 2020
+
+```{r warning = FALSE, results = "asis", message = FALSE}
+x <- lapply(filtered_wide_data, function(x)
+  x %>%
+    select(AgeYears, Gender, PollutionDiagnosisOrFinding, Sponsored)
+)
+
+dfSummary(
+  x[["twenty"]],
+  plain.ascii = FALSE,
+  headings = FALSE,
+  graph.col = FALSE,
+  graph.magnif = 0.75,
+  style = "grid",
+  na.col = FALSE,
+  tmp.img.dir = "img"
+)
+```
+
+##### 2018
+
+```{r warning = FALSE, results = "asis", message = FALSE}
+x <- lapply(filtered_wide_data, function(x)
+  x %>%
+    select(AgeYears, Gender, PollutionDiagnosisOrFinding, Sponsored)
+)
+
+dfSummary(
+  x[["eighteen"]],
+  plain.ascii = FALSE,
+  headings = FALSE,
+  graph.col = FALSE,
+  graph.magnif = 0.75,
+  style = "grid",
+  na.col = FALSE,
+  tmp.img.dir = "img"
+)
+```
+
+#### Age distribution and Gender
+
+```{r include = FALSE, eval = FALSE}
+# ggplot(filtered_wide_data, aes(x = AgeYears, fill = Gender)) + geom_histogram(binwidth = 1)
+```
+
+```{r warning = FALSE}
+age_gender <- lapply(filtered_wide_data, function(x)
+  x %>%
+    mutate(Gender = as.character(Gender)) %>%
+    replace_na(list(Gender = "Unknown")) %>%
+    count(AgeYears, Gender)
+)
+
+age_gender <- lapply(age_gender, function(x)
+  x %>%
+    right_join(x %>%
+                 tidyr::expand(AgeYears, Gender),
+               by = c("AgeYears", "Gender"))
+)
+
+age_gender_sponsored <- lapply(filtered_wide_data, function(x)
+  x %>%
+    mutate(Gender = as.character(Gender)) %>%
+    replace_na(list(Gender = "Unknown")) %>%
+    count(AgeYears, Gender, Sponsored)
+)
+
+age_gender_sponsored <- lapply(age_gender_sponsored, function(x)
+  x %>%
+    right_join(x %>%
+                 tidyr::expand(AgeYears, Gender, Sponsored),
+               by = c("AgeYears", "Gender", "Sponsored")) %>%
+    tidyr::replace_na(list(n = 0)) %>%
+    mutate(n = dplyr::if_else(Gender == "Female", -n, n)) %>%
+    # turn female 'n' count to negative
+    mutate(Group = paste0(
+      Gender,
+      dplyr::if_else(Sponsored, "+Sponsored", ""), sep = "")
+    )
+)
+
+# age_gender %>%
+#   hchart(
+#    'areaspline',
+#    hcaes(x = "AgeYears", y = "n", group = "Gender")
+#  ) %>%
+#  hc_exporting(enabled = TRUE)
+# hc_colors(viridis(3, alpha = 0.5))
+```
+
+```{r warning = FALSE}
+ags_wide <- lapply(age_gender_sponsored, function(x)
+  x %>%
+    filter(Group != 'Unknown+Sponsored') %>% # there are no members in this group
+    select(Age = AgeYears) %>%  
+    distinct() %>% 
+    arrange(Age)
+)
+partial <- lapply(age_gender_sponsored, function(x)
+  x %>% 
+    filter(Group != 'Unknown+Sponsored') %>% # there are no members in this group
+    select(n, AgeYears, Group)
+)
+ags_wide <- mapply(function(x, y)
+  x %>% 
+    left_join(
+      spread(y, key = Group, value = n),
+      by = c("Age" = "AgeYears")),
+  ags_wide, partial, SIMPLIFY = FALSE
+)
+```
+
+```{r}
+hc <- highchart() %>%
+  hc_chart(type = "bar") %>%
+  hc_title(text = "Age distribution and gender, 2020") %>%
+  hc_subtitle(text = "Children seen in Spur Afrika clinic, Kibera, Nairobi") %>%
+  hc_xAxis(
+    list(title = "Age (years)",
+         categories = ags_wide[["twenty"]]$Age,
+         reversed = FALSE,
+         labels = list(step = 1)),
+    list(categories = ags_wide[["twenty"]]$Age,
+         opposite = TRUE,
+         reversed = FALSE,
+         linkedTo = 0,
+         labels = list(step = 1))
+    
+  ) %>%
+  hc_tooltip(
+    shared = FALSE,
+    formatter = JS("function () {
+                   return 'Age: ' + this.point.category + ' years<br/>' +
+                   '<b>' + this.series.name + '</b> ' +
+                   Highcharts.numberFormat(Math.abs(this.point.y), 0);}")
+  ) %>%
+  hc_yAxis(title= list(text = "Number (n). Age in years"),
+           labels=list(formatter=JS("function () {
+               return Math.abs(this.value);
+             }")))%>%
+  hc_plotOptions(series=list(stacking= 'normal'))
+
+for (i in unique(age_gender_sponsored[["twenty"]]$Group)) {
+  if (i != 'Unknown+Sponsored') {
+    hc <- hc %>%
+      hc_add_series(name = i, data = ags_wide[["twenty"]][[i]])
+  }
+}
+
+hc %>%
+  hc_exporting(enabled = TRUE)
+
+```
+
+```{r}
+hc <- highchart() %>%
+  hc_chart(type = "bar") %>%
+  hc_title(text = "Age distribution and gender, 2018") %>%
+  hc_subtitle(text = "Children seen in Spur Afrika clinic, Kibera, Nairobi") %>%
+  hc_xAxis(
+    list(title = "Age (years)",
+         categories = ags_wide[["eighteen"]]$Age,
+         reversed = FALSE,
+         labels = list(step = 1)),
+    list(categories = ags_wide[["eighteen"]]$Age,
+         opposite = TRUE,
+         reversed = FALSE,
+         linkedTo = 0,
+         labels = list(step = 1))
+    
+  ) %>%
+  hc_tooltip(
+    shared = FALSE,
+    formatter = JS("function () {
+                   return 'Age: ' + this.point.category + ' years<br/>' +
+                   '<b>' + this.series.name + '</b> ' +
+                   Highcharts.numberFormat(Math.abs(this.point.y), 0);}")
+  ) %>%
+  hc_yAxis(title= list(text = "Number (n). Age in years"),
+           labels=list(formatter=JS("function () {
+               return Math.abs(this.value);
+             }")))%>%
+  hc_plotOptions(series=list(stacking= 'normal'))
+
+for (i in unique(age_gender_sponsored[["eighteen"]]$Group)) {
+  if (i != 'Unknown+Sponsored') {
+    hc <- hc %>%
+      hc_add_series(name = i, data = ags_wide[["eighteen"]][[i]])
+  }
+}
+
+hc %>%
+  hc_exporting(enabled = TRUE)
+```
+
+#### Schools of children seen (top ten)
+
+##### 2020
+
+```{r}
+knitr::kable(
+  head(sort(summary(filtered_wide_data[["twenty"]]$School), decreasing = TRUE), 10),
+  col.names = c("n"),
+) %>%
+  kableExtra::kable_styling(latex_options = "striped")
+```
+
+##### 2018
+
+```{r}
+knitr::kable(
+  head(sort(summary(filtered_wide_data[["eighteen"]]$School), decreasing = TRUE), 10),
+  col.names = c("n"),
+) %>%
+  kableExtra::kable_styling(latex_options = "striped")
+```
+
+
+#### Diagnosis and finding categories
+
+##### Schools (not sponsored) children
+
+```{r}
+filtered_wide_school <- lapply(filtered_wide_data, function(x)
+  x %>%
+    filter(!Sponsored)
+)
+
+category_school <- lapply(filtered_wide_school, function(x)
+  x %>%
+    select(PollutionDiagnosisOrFinding, 
+           `No complaints`, 
+           Respiratory,
+           EarsNose, 
+           Gastrointestinal,
+           Dermatological,
+           Psychological,
+           Opthalmological,
+           Musculoskeletal,
+           Dental,
+           Gynaecological,
+           Urological,
+           Neurological) %>%
+    # keep just the categories
+    colSums() %>%
+    # then the number in each category
+    sort(decreasing = TRUE)
+)
+```
+
+```{r}
+category_school_levels <- lapply(category_school, function(x) as.character(names(x)))
+category_school_df <- mapply(function(x, y)
+  as.data.frame(x) %>%
+    mutate(Category = y) %>%
+    rename(n = x), # 'x' is actually the name of the totals column (double meaning...)
+  category_school, category_school_levels, SIMPLIFY = FALSE
+)
+
+category_school_df_combined <- 
+  category_school_df$eighteen %>%
+  mutate(group = "2018") %>%
+  rbind(category_school_df$twenty %>%
+          mutate(group = "2020"))
+
+category_school_df_combined %>%
+  hchart("column", hcaes(x = Category, y = n, group = group)) %>%
+  hc_title(text = "Finding categories, children (not sponsored), 2018 and 2020") %>%
+  hc_subtitle(text = paste(
+    "Up to age 18 years inclusive seen in Spur Afrika clinic, Kibera, Nairobi<br>",
+    "2018:", nrow(filtered_wide_school[["eighteen"]]), "children, ",
+    "2020:", nrow(filtered_wide_school[["twenty"]]), "children, ")
+  ) %>%
+  hc_exporting(enabled = TRUE)
+```
+
+
+`PollutionDiagnosisOrFinding` are symptoms or diagnoses potentially attributable to air pollution. Examples include eye irritation, cough and feeling out of breath easily when running.
+
+
+```{r}
+percentage_school <- mapply(function(x,y)
+  x/nrow(y),
+  category_school, filtered_wide_school, SIMPLIFY = FALSE
+)
+```
+
+##### Sponsored
+
+```{r}
+filtered_wide_sponsored <- lapply(filtered_wide_data, function(x)
+  x %>%
+    filter(Sponsored)
+)
+category_sponsored <- lapply(filtered_wide_sponsored, function(x)
+  x %>%
+    select(PollutionDiagnosisOrFinding, 
+           `No complaints`, 
+           Respiratory,
+           EarsNose, 
+           Gastrointestinal,
+           Dermatological,
+           Psychological,
+           Opthalmological,
+           Musculoskeletal,
+           Dental,
+           Gynaecological,
+           Urological,
+           Neurological) %>%
+    colSums() %>%
+    sort(decreasing = TRUE)
+)
+```
+
+```{r}
+category_sponsored_levels <- lapply(category_sponsored, function(x) as.character(names(x)))
+category_sponsored_df <- mapply(function(x, y)
+  as.data.frame(x) %>%
+    mutate(Category = y) %>%
+    rename(n = x), # 'x' is actually the name of the totals column (double meaning...)
+  category_sponsored, category_sponsored_levels, SIMPLIFY = FALSE
+)
+
+category_sponsored_df_combined <- 
+  category_sponsored_df$eighteen %>%
+  mutate(group = "2018") %>%
+  rbind(category_sponsored_df$twenty %>%
+          mutate(group = "2020"))
+
+category_sponsored_df_combined %>%
+  hchart("column", hcaes(x = Category, y = n, group = group)) %>%
+  hc_title(text = "Finding categories, children (Spur Afrika), 2018 and 2020") %>%
+  hc_subtitle(text = paste(
+    "Up to age 18 years inclusive seen in Spur Afrika clinic, Kibera, Nairobi<br>",
+    "2018:", nrow(filtered_wide_sponsored[["eighteen"]]), "children, ",
+    "2020:", nrow(filtered_wide_sponsored[["twenty"]]), "children, ")
+  ) %>%
+  hc_exporting(enabled = TRUE)
+```
+
+```{r}
+percentage_sponsored <- mapply(function(x, y)
+  x / nrow(y),
+  category_sponsored, filtered_wide_sponsored, SIMPLIFY = FALSE
+)
+```
+
+```{r}
+percentage_sponsored_levels <- lapply(percentage_sponsored, function(x) as.character(names(x)))
+percentage_sponsored_df <- mapply(function(x, y)
+  as.data.frame(x) %>%
+    mutate(Category = y) %>%
+    rename(Proportion = x), # 'x' is actually the name of the totals column (double meaning...)
+  percentage_sponsored, percentage_sponsored_levels, SIMPLIFY = FALSE
+)
+
+percentage_sponsored_df_combined <- 
+  percentage_sponsored_df$eighteen %>%
+  mutate(group = "2018") %>%
+  rbind(percentage_sponsored_df$twenty %>%
+          mutate(group = "2020"))
+
+percentage_sponsored_df_combined %>%
+  hchart("bar", hcaes(x = Category, y = Proportion, group = group)) %>%
+  hc_title(text = "Finding categories, children (Spur Afrika), 2018 and 2020") %>%
+  hc_subtitle(text = paste(
+    "Up to age 18 years inclusive seen in Spur Afrika clinic, Kibera, Nairobi<br>",
+    "2018:", nrow(filtered_wide_sponsored[["eighteen"]]), "children, ",
+    "2020:", nrow(filtered_wide_sponsored[["twenty"]]), "children, ")
+  ) %>%
+  hc_tooltip(pointFormat = "<span style=\"color:{point.color}\">●</span> {series.name}: <strong>{point.y:.2f}</strong>") %>%
+  hc_exporting(enabled = TRUE)
+```
+
+
+## Outcomes
+
+### Comparison of sponsored and non-sponsored children finding/diagnosis categories
+
+Comparison by proportion
+
+```{r}
+category_levels <- lapply(percentage_school, function(x) as.character(names(x)))
+sponsored_levels <- lapply(percentage_sponsored, function(x) as.character(names(x)))
+percentage_school_df <- mapply(function(x, y)
+  as.data.frame(x) %>%
+    mutate(Category = y),
+  percentage_school, category_levels, SIMPLIFY = FALSE
+)
+percentage_sponsored_df <- mapply(function(x, y)
+  as.data.frame(x) %>%
+    mutate(Category = y),
+  percentage_sponsored, sponsored_levels, SIMPLIFY = FALSE)
+
+percentage_df <- mapply(function(x, y)
+  x %>%
+    rename(proportion = `x`) %>%
+    mutate(group = 'School (not sponsored)') %>%
+    rbind(y %>%
+            rename(proportion = `x`) %>%
+            mutate(group = 'Sponsored')
+    ),
+  percentage_school_df, percentage_sponsored_df, SIMPLIFY = FALSE
+)
+```
+
+
+```{r warning = FALSE}
+percentage_df[["twenty"]] %>%
+  hchart('bar', hcaes(x = 'Category', y = 'proportion', group = 'group')) %>%
+    hc_title(text = "Finding categories, children, 2020") %>%
+  hc_subtitle(text = paste(
+    "Up to age 18 years inclusive seen in Spur Afrika clinic, Kibera, Nairobi<br>",
+    "General school clinic and sponsored (Spur Afrika)"
+  )) %>%
+  hc_tooltip(pointFormat = "<span style=\"color:{point.color}\">●</span> {series.name}: <strong>{point.y:.2f}</strong>") %>%
+  hc_exporting(enabled = TRUE)
+
+```
+
+A greater proportion of children sponsored by Spur Afrika are likely to report 'no complaints', or (in this analysis) found or reported to have dental problems, compared to children who are not sponsored by Spur Afrika.
+
+In the case of more children from Spur Afrika reporting 'no complaints', this may be the result of the financial benefits of sponsorship, better access to healthcare (such as via Dr Simiyu, or via National Health Insurance) and/or better education.
+
+A smaller proportion of children sponsored by Spur Afrika had respiratory symptoms/diagnoses or symptoms/diagnoses potentially attributable to air pollution. This might be due to better access to healthcare, the financial benefits of sponsorship or education.
+
+By comparison, in 2018 the proportion of sponsored children reporting respiratory complaints, problems potentially attributable to air pollution or 'no complaints' was similar to school children not sponsored by Spur Afrika.
+
+
+```{r}
+percentage_df[["eighteen"]] %>%
+  hchart('bar', hcaes(x = 'Category', y = 'proportion', group = 'group')) %>%
+  hc_title(text = "Finding categories, children, 2018") %>%
+  hc_subtitle(text = paste(
+    "Up to age 18 years inclusive seen in Spur Afrika clinic, Kibera, Nairobi<br>",
+    "General school clinic and sponsored (Spur Afrika)"
+  )) %>%
+  hc_tooltip(pointFormat = "<span style=\"color:{point.color}\">●</span> {series.name}: <strong>{point.y:.2f}</strong>") %>%
+  hc_exporting(enabled = TRUE)
+
+```
+
+### Dental hygiene (2020) - age up to sixteen years inclusive
+
+#### Dental hygiene and sponsorship
+
+```{r}
+DentalHygiene <- filtered_wide_data[["twenty"]] %>%
+  filter(!is.na(OralHygiene),
+         AgeYears <= 16) %>%
+  select(Sponsored, OralHygiene)
+```
+
+```{r}
+DentalHygiene %>%
+  table() %>%
+  prop.table() %>%
+  as.data.frame() %>%
+  group_by(Sponsored) %>%
+  mutate(Proportion = Freq/sum(Freq)) %>%
+  ungroup() %>%
+  hchart("bar", hcaes(x = Sponsored, y = Proportion, group = OralHygiene)) %>%
+  hc_plotOptions(series=list(stacking= 'normal')) %>%
+  hc_title(text = "Dental hygiene, children, 2020") %>%
+  hc_yAxis(reversedStacks = FALSE,
+           max = 1) %>%
+  hc_subtitle(text = paste(
+    "Number of reported teeth brushings per day in Spur Afrika clinic, Kibera, Nairobi<br>",
+    "General school clinic and sponsored (Spur Afrika), age up to sixteen years inclusive."
+  )) %>%
+  hc_tooltip(pointFormat = "<span style=\"color:{point.color}\">●</span> {series.name}: <strong>{point.y:.2f}</strong>") %>%
+  hc_exporting(enabled = TRUE)
+  
+```
+
+Dental hygiene (number of times the child reported brushing teeth daily) was recorded for `r nrow(DentalHygiene)` children, including `r nrow(DentalHygiene %>% filter(Sponsored))` sponsored children.
+
+Children who were not sponsored by Spur Afrika reported brushing teeth a mean of `r signif(mean(DentalHygiene %>% filter(!Sponsored) %>% pull(OralHygiene)), 3)` times (median `r median(DentalHygiene %>% filter(!Sponsored) %>% pull(OralHygiene))`).
+
+Children who are sponsored by Spur Afrika reported brushing teeth a mean of `r signif(mean(DentalHygiene %>% filter(Sponsored) %>% pull(OralHygiene)), 3)` times (median `r median(DentalHygiene %>% filter(Sponsored) %>% pull(OralHygiene))`), statistically significantly different to the children not sponsored by Spur Afrika (Wilcoxon Signed-Rank Test, non paired, $p=$ `r x = wilcox.test(DentalHygiene[DentalHygiene$Sponsored,]$OralHygiene,DentalHygiene[!DentalHygiene$Sponsored,]$OralHygiene, paired = FALSE); format(x$p.value, scientific = FALSE, digits = 3)`)
+
+However, although children sponsored by Spur Afrika reported brushing their teeth more times per day, they also had more findings of dental problems in 2020 (`r format(percentage_df[["twenty"]] %>% filter(group == "Sponsored", Category == "Dental") %>% pull(proportion), digits = 2)`) compared to children who were not sponsored (`r format(percentage_df[["twenty"]] %>% filter(group == "School (not sponsored)", Category == "Dental") %>% pull(proportion), digits = 2)`). This finding is very different to that found in 2018 (`r format(percentage_df[["eighteen"]] %>% filter(group == "Sponsored", Category == "Dental") %>% pull(proportion), digits = 2)` for sponsored children in 2018, compared to `r format(percentage_df[["eighteen"]] %>% filter(group == "School (not sponsored)", Category == "Dental") %>% pull(proportion), digits = 2)` for not sponsored)!
+
+Perhaps this is a 'random effect' of the interviewing clinician, where a clinician who saw a greater proportion of the sponsored children was also more likely to find dental problems in general. A generalized linear mixed-effect model with 'Clinician' as a random effect suggests that clinician variation in finding dental problems explains much of the difference in reported dental problems between sponsored and other children. 
+
+```{r}
+dental_data <- data$twenty %>%
+  filter(AgeYears <= 16) %>%
+  rename(DentalProblems = Dental)
+
+dental_model_1 <- glm(
+  DentalProblems ~ Sponsored,
+  data = data$twenty %>% rename(DentalProblems = Dental),
+  family = binomial(link = "logit")
+)
+dental_model_2 <- glmer(
+  DentalProblems ~ Sponsored + (1 | Clinician),
+  data = data$twenty %>% rename(DentalProblems = Dental),
+  family = binomial(link = "logit")
+)
+tab_model(
+  dental_model_1, dental_model_2,
+  show.aic = TRUE,
+  title = "Dental problems, children up to age of 16 years inclusive. Spur Afrika 2020 clinics"
+)
+```
+
+&nbsp;
+
+#### Dental hygiene and dental problems
+
+```{r}
+DentalHygiene2 <- filtered_wide_data[["twenty"]] %>%
+  filter(!is.na(OralHygiene),
+         AgeYears <= 16) %>%
+  select(OralHygiene, Dental)
+```
+
+```{r}
+DentalHygiene2 %>%
+  table() %>%
+  prop.table() %>%
+  as.data.frame() %>%
+  group_by(Dental) %>%
+  mutate(Proportion = Freq/sum(Freq)) %>%
+  ungroup() %>%
+  hchart("bar", hcaes(x = Dental, y = Proportion, group = OralHygiene)) %>%
+  hc_plotOptions(series=list(stacking= 'normal')) %>%
+  hc_title(text = "Dental hygiene, children, 2020") %>%
+  hc_xAxis(title = list(text = "Dental problems")) %>%
+  hc_yAxis(reversedStacks = FALSE,
+           max = 1) %>%
+  hc_subtitle(text = paste(
+    "Number of reported teeth brushings per day and Presence of dental problems<br>",
+    "Spur Afrika clinic, Kibera, Nairobi<br>",
+    "General school clinic and sponsored (Spur Afrika), age up to sixteen years inclusive."
+  )) %>%
+  hc_tooltip(pointFormat = "<span style=\"color:{point.color}\">●</span> {series.name}: <strong>{point.y:.2f}</strong>") %>%
+  hc_exporting(enabled = TRUE)
+  
+```
+
+Of the children seen by medical doctors and with recorded dental hygiene history, `r sum(!DentalHygiene2$Dental)` did not have a dental problem identified by the doctor, and `r sum(DentalHygiene2$Dental)` had a dental problem identified by the doctor.
+
+Children who did not have identified dental problems reported brushing teeth a mean of `r signif(mean(DentalHygiene2 %>% filter(!Dental) %>% pull(OralHygiene)), 3)` times (median `r median(DentalHygiene2 %>% filter(!Dental) %>% pull(OralHygiene))`).
+
+Children who did have identified dental problems reported brushing teeth a mean of `r signif(mean(DentalHygiene2 %>% filter(Dental) %>% pull(OralHygiene)), 3)` times (median `r median(DentalHygiene2 %>% filter(Dental) %>% pull(OralHygiene))`), not statistically significantly different to the children who did not have an identified dental problem (Wilcoxon Signed-Rank Test, non paired, $p=$ `r x = wilcox.test(DentalHygiene2[DentalHygiene2$Dental,]$OralHygiene,DentalHygiene2[!DentalHygiene2$Dental,]$OralHygiene, paired = FALSE); format(x$p.value, scientific = FALSE, digits = 3)`)
+
+### Conditions potentially attributable to air pollution
+
+Indoor air pollution, in the form of particulate matter (PM<sub>2.5</sub>) is found in hazardous levels in 86% of Nairobi slum households [@muindi2017a].  As the result of poverty and poor availability of public goods, such as natural gas and electricity, cheap but polluting biomass fuels are used for cooking, lighting and heating [@muindi2017a; @nlom2015s]. Studies have shown an association between indoor air pollution and respiratory symptoms and illnesses among children aged under five years in the slums of Nairobi [@egondi2018a].
+
+The tables below (drawn from children seen in both 2018 abnd 2020) show models comparing finding or diagnoses potentially attributable to air pollution (such as cough, asthma and eye or nose symptoms) and being sponsored by Spur Afrika.
+
+It is thought that the burden of exposure to indoor air pollution, and resulting health consequences, falls disproportionately on women and girls who use the cooking stove [@ezzati2002ehp], so gender is included as a potential explanatory variable.
+
+As consultations by clinicians are open-ended, differences in the frequency at which clinicians elicit symptoms or diagnoses potentially attributable to air pollution is expected, so 'Clinicians' are included as a random effect in the third and fourth column models.
+
+```{r}
+pollution_data_2018 <- data$eighteen %>%
+  filter(AgeYears <= 16)
+pollution_data_2020 <- data$twenty %>%
+  filter(AgeYears <= 16)
+  
+pollution_model_2018 <- glm(
+  PollutionDiagnosisOrFinding ~ Gender + Sponsored,
+  data = pollution_data_2018,
+  family = binomial(link = "logit")
+)
+
+pollution_model_2020a <- glm(
+  PollutionDiagnosisOrFinding ~ Gender + Sponsored,
+  data = pollution_data_2020,
+  family = binomial(link = "logit")
+)
+
+pollution_model_2020b <- glmer(
+  PollutionDiagnosisOrFinding ~ Gender + Sponsored + (1 | Clinician),
+  data = pollution_data_2020,
+  family = binomial(link = "logit")
+)
+
+pollution_model_2020c <- glmer(
+  PollutionDiagnosisOrFinding ~ Gender + Sponsored + Gender * Sponsored + (1 | Clinician),
+  data = pollution_data_2020,
+  family = binomial(link = "logit")
+)
+
+tab_model(
+  pollution_model_2018, pollution_model_2020a, pollution_model_2020b, pollution_model_2020c,
+  dv.labels = c(
+    "2018",
+    "2020 - simple model",
+    "2020 - with clinician random effect",
+    "2020 - with gender:sponsored interaction"
+  ),
+  show.aic = TRUE,
+  title = paste(
+    "Conditions potentially attributable to air pollution, children up to age of 16 years inclusive.",
+    "Spur Afrika clinics"
+  )
+)
+  
+```
+
+<br>
+
+Children sponsored by Spur Afrika have significantly less likelihood (`r x = summary(pollution_model_2020b); format(exp(x$coefficients["SponsoredTRUE", "Estimate"]), digits = 2)`) compared to other children of reporting symptoms potentially attributable to air pollution (95% confidence interval `r x = summary(pollution_model_2020b); format(exp(x$coefficients["SponsoredTRUE", "Estimate"]-1.96*x$coefficients["SponsoredTRUE", "Std. Error"]), digits = 2)` - `r x = summary(pollution_model_2020b); format(exp(x$coefficients["SponsoredTRUE", "Estimate"]+1.96*x$coefficients["SponsoredTRUE", "Std. Error"]), digits = 2)`). 
+
+## Resources utilized (Inputs)
+
+* Local doctors : Dr Simiyu, Dr Ngao and Dr Daniel.
+* Local dentists: Dr Mary, Dr. Dennis. Dental staff : Benina
+* Visiting doctors : Dr Grace Wong, Dr David Fong.
++ Interpreters to assist overseas visiting staff
+* Local Spur Afrika team and local volunteers. 
+* Visiting volunteers : Alex Box, Jing Kok, Rosalie Lui.
++ Accommodation for visiting volunteers and doctors. Thanks to Susan Musungu and family!
+* Venue : Clinics conducted at school locations and adjacent church halls.
+Thanks to K.A.G. Olympic Education Centrel, Brainstorm and Tumaini Hope Center for providing spaces to conduct the clinics.
+* Loan of dental equipment and supplies : Dr Frank Yang
+* Medications 
+* Medication aids : Twenty ‘spacers’ for use with metered-dose-inhalers (MDI) for asthma medication.
+* Oral hygiene supplies : toothbrushes and toothpaste
+
+## References
+
+<div id = "refs"></div>
