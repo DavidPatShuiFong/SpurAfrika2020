@@ -1,6 +1,6 @@
 ---
 title: "Spur Afrika Mobile Health Clinic 2020 Report"
-author: "David Fong"
+author: "[David Fong](https://www.davidfong.info)"
 date: "15th December 2020"
 output:
   rmdformats::readthedown:
