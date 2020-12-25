@@ -926,7 +926,7 @@ Of the children seen by medical doctors and with recorded dental hygiene history
 
 Children who did not have identified dental problems reported brushing teeth a mean of `r signif(mean(DentalHygiene2 %>% filter(!Dental) %>% pull(OralHygiene)), 3)` times (median `r median(DentalHygiene2 %>% filter(!Dental) %>% pull(OralHygiene))`).
 
-Children who did have identified dental problems reported brushing teeth a mean of `r signif(mean(DentalHygiene2 %>% filter(Dental) %>% pull(OralHygiene)), 3)` times (median `r median(DentalHygiene2 %>% filter(Dental) %>% pull(OralHygiene))`), not statistically significantly different to the children who did not have an identified dental problem (Wilcoxon Signed-Rank Test, non paired, $p=$ `r x = wilcox.test(DentalHygiene2[DentalHygiene2$Dental,]$OralHygiene,DentalHygiene2[!DentalHygiene2$Dental,]$OralHygiene, paired = FALSE); format(x$p.value, scientific = FALSE, digits = 3)`)
+Children who did have identified dental problems reported brushing teeth a mean of `r signif(mean(DentalHygiene2 %>% filter(Dental) %>% pull(OralHygiene)), 3)` times (median `r median(DentalHygiene2 %>% filter(Dental) %>% pull(OralHygiene))`), not statistically significantly different to the children who did not have an identified dental problem (Wilcoxon Signed-Rank Test, non paired, $p=$ `r x = wilcox.test(DentalHygiene2[DentalHygiene2$Dental,]$OralHygiene,DentalHygiene2[!DentalHygiene2$Dental,]$OralHygiene, paired = FALSE); format(x$p.value, scientific = FALSE, digits = 2)`)
 
 ### Conditions potentially attributable to air pollution
 
