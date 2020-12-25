@@ -25,7 +25,7 @@ csl: "./apa.csl"
 
 ## Abstract
 
-  >Spur Afrika mobile clinics were held in January 2020, seeing children
+  >[Spur Afrika](https://spurafrika.org/) mobile clinics were held in January 2020, seeing children
   from several schools in Kibera, Kenya, and children sponsored by the Spur Afrika
   Elimsha program. Health activities included medical and dental checks, dental
   hygiene education and medication education. 938 children were seen, ranging in
@@ -52,7 +52,7 @@ csl: "./apa.csl"
 
 ## Introduction
 
-Spur Afrika mobile medical clinics were conducted in January 2020, reaching out to 
+[Spur Afrika](https://spurafrika.org/) mobile medical clinics were conducted in January 2020, reaching out to 
 children in Spur Afrika Elimisha sponsorship program during a camp retreat and to
 entire classes of children in Kibera during clinics at Kibera schools.
 
